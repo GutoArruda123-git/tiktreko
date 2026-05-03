@@ -1,6 +1,8 @@
+import { API_STATE, loadKeys, saveKeys, searchPexels } from './api.js';
+import { ImgEditor, renderImageEditGrid } from './img-editor.js';
+
 // ===== TikTreko - App Logic =====
-const APP = {
-    apiKey: localStorage.getItem('pexels_api_key') || '',
+export const APP = {
     selectedImages: [],
     currentQuery: '',
     currentPage: 1,
@@ -28,7 +30,7 @@ const APP = {
     addingToSlot: null,
 };
 
-const LAYOUTS = {
+export const LAYOUTS = {
     '1x1': { cols: 1, rows: 1, count: 1 },
     '1x2': { cols: 1, rows: 2, count: 2 },
     '2x1': { cols: 2, rows: 1, count: 2 },
@@ -41,9 +43,25 @@ const LAYOUTS = {
 
 document.addEventListener('DOMContentLoaded', () => {
     setCurrentMonth();
-    if (!APP.apiKey) showModal(); else hideModal();
     bindEvents();
     ImgEditor.init();
+    
+    // Auth observer event
+    window.addEventListener('auth-changed', async (e) => {
+        if (e.detail.user) {
+            await loadKeys();
+            if (!API_STATE.pexelsKey) {
+                showModal();
+            } else {
+                hideModal();
+                // Optional: run a default search
+            }
+        }
+    });
+
+    window.addEventListener('show-toast', (e) => {
+        toast(e.detail.message, e.detail.type);
+    });
 });
 
 function setCurrentMonth() {
@@ -59,16 +77,20 @@ function hideModal() { document.getElementById('apiKeyModal').classList.add('hid
 
 function bindEvents() {
     // API Key
-    document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+    document.getElementById('saveApiKeyBtn').addEventListener('click', async () => {
         const key = document.getElementById('apiKeyInput').value.trim();
         if (!key) return toast('Cole sua API key!', 'error');
-        APP.apiKey = key;
-        localStorage.setItem('pexels_api_key', key);
-        hideModal();
-        toast('API Key salva! ✨', 'success');
+        
+        const success = await saveKeys(key);
+        if (success) {
+            hideModal();
+            toast('API Key salva na nuvem! ✨', 'success');
+        } else {
+            toast('Erro ao salvar API Key.', 'error');
+        }
     });
     document.getElementById('changeApiKeyBtn').addEventListener('click', () => {
-        document.getElementById('apiKeyInput').value = APP.apiKey;
+        document.getElementById('apiKeyInput').value = API_STATE.pexelsKey || '';
         showModal();
     });
 
@@ -228,7 +250,7 @@ function bindColorPicker(containerId, customInputId, onChange) {
 
 // ===== Pexels API =====
 async function searchImages(query, append = false) {
-    if (!APP.apiKey) { showModal(); return; }
+    if (!API_STATE.pexelsKey) { showModal(); return; }
     if (!append) { APP.currentPage = 1; APP.currentQuery = query; document.getElementById('galleryGrid').innerHTML = ''; }
 
     document.getElementById('emptyState').classList.add('hidden');
@@ -236,20 +258,21 @@ async function searchImages(query, append = false) {
     document.getElementById('loadMoreBtn').classList.add('hidden');
 
     try {
-        const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=30&page=${APP.currentPage}&orientation=portrait`;
-        const resp = await fetch(url, { headers: { 'Authorization': APP.apiKey } });
-        if (!resp.ok) {
-            if (resp.status === 401) { toast('API Key inválida!', 'error'); showModal(); return; }
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
+        const data = await searchPexels(query, APP.currentPage);
         renderGallery(data.photos, append);
         if (data.photos.length > 0 && APP.currentPage * 30 < data.total_results) {
             document.getElementById('loadMoreBtn').classList.remove('hidden');
         }
     } catch (err) {
         console.error(err);
-        toast('Erro ao buscar imagens.', 'error');
+        if (err.message === "INVALID_KEY") {
+            toast('API Key inválida!', 'error');
+            showModal();
+        } else if (err.message === "NO_API_KEY") {
+            showModal();
+        } else {
+            toast('Erro ao buscar imagens.', 'error');
+        }
     } finally {
         document.getElementById('loadingIndicator').classList.add('hidden');
     }
@@ -327,7 +350,7 @@ function toggleSelect(photo, el) {
     updateSelectionBar();
 }
 
-function updateSelectionBadges() {
+export function updateSelectionBadges() {
     document.querySelectorAll('.gallery-item').forEach(item => {
         const id = parseInt(item.dataset.id);
         const idx = APP.selectedImages.findIndex(s => s.id === id);
@@ -342,7 +365,7 @@ function updateSelectionBadges() {
     });
 }
 
-function updateSelectionBar() {
+export function updateSelectionBar() {
     const bar = document.getElementById('selectionBar');
     const count = APP.selectedImages.length;
     const need = LAYOUTS[APP.layout].count;
@@ -383,7 +406,7 @@ function clearSelection() {
 }
 
 // ===== Batch Montages =====
-function buildMontages() {
+export function buildMontages() {
     APP.montages = [];
     const need = LAYOUTS[APP.layout].count;
     const imgs = [...APP.selectedImages];
@@ -404,7 +427,7 @@ function switchMontage(delta) {
     });
 }
 
-function updateBatchNav() {
+export function updateBatchNav() {
     const nav = document.getElementById('batchNav');
     const total = APP.montages.length;
     if (total > 1) {
@@ -431,12 +454,12 @@ function openEditor() {
     loadCurrentMontageImages().then(() => { renderCanvas(); renderImageEditGrid(); });
 }
 
-function closeEditor() {
+export function closeEditor() {
     document.getElementById('editorSection').classList.add('hidden');
     document.getElementById('searchSection').classList.remove('hidden');
 }
 
-async function loadCurrentMontageImages() {
+export async function loadCurrentMontageImages() {
     const group = APP.montages[APP.currentMontageIdx];
     if (!group) return;
     APP.loadedCanvasImages = [];
@@ -482,7 +505,7 @@ function wrapText(ctx, text, maxWidth) {
     return lines;
 }
 
-function renderCanvas() {
+export function renderCanvas() {
     const canvas = document.getElementById('montageCanvas');
     const ctx = canvas.getContext('2d');
     const W = 1080, H = 1920;
@@ -635,7 +658,7 @@ async function downloadAll() {
 }
 
 // ===== Toast =====
-function toast(msg, type = 'info') {
+export function toast(msg, type = 'info') {
     const container = document.getElementById('toastContainer');
     const div = document.createElement('div');
     div.className = `toast ${type}`;

@@ -1,5 +1,7 @@
+import { APP, LAYOUTS, toast, closeEditor, renderCanvas, updateSelectionBadges, updateSelectionBar, buildMontages, loadCurrentMontageImages } from './app.js';
+
 // ===== Image Editor Module =====
-const ImgEditor = {
+export const ImgEditor = {
     imageSettings: {}, // keyed by image id
     editingIdx: -1,
     editingImg: null,
@@ -202,7 +204,7 @@ const ImgEditor = {
     },
 };
 
-function renderImageEditGrid() {
+export function renderImageEditGrid() {
     const grid = document.getElementById('imageEditGrid');
     if (!grid) return;
     grid.innerHTML = '';
