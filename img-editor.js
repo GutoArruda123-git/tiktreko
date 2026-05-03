@@ -209,18 +209,96 @@ function renderImageEditGrid() {
     const group = APP.montages[APP.currentMontageIdx];
     if (!group) return;
 
-    group.forEach((item, i) => {
-        const s = ImgEditor.getSettings(item.id);
-        const edited = s.zoom !== 100 || s.brightness !== 100 || s.contrast !== 100 || s.saturate !== 100 || s.filter !== 'normal';
+    const need = LAYOUTS[APP.layout].count;
+
+    for (let i = 0; i < need; i++) {
+        const item = group[i];
         const tile = document.createElement('div');
-        tile.className = 'img-edit-tile';
-        tile.innerHTML = `
-            <img src="${item.thumb}" alt="">
-            <div class="img-edit-badge">${i + 1}</div>
-            ${edited ? '<div class="img-edit-edited">EDITADA</div>' : ''}
-            <div class="img-edit-overlay"><span>✂️</span><small>EDITAR</small></div>
-        `;
-        tile.addEventListener('click', () => ImgEditor.open(i));
+
+        if (item) {
+            const s = ImgEditor.getSettings(item.id);
+            const edited = s.zoom !== 100 || s.brightness !== 100 || s.contrast !== 100 || s.saturate !== 100 || s.filter !== 'normal';
+            
+            tile.className = 'img-edit-tile';
+            tile.draggable = true;
+            tile.innerHTML = `
+                <img src="${item.thumb}" alt="">
+                <div class="img-edit-badge">${i + 1}</div>
+                ${edited ? '<div class="img-edit-edited">EDITADA</div>' : ''}
+                <div class="img-edit-overlay"><span>✂️</span><small>EDITAR</small></div>
+            `;
+            
+            // Editor Click
+            tile.addEventListener('click', () => ImgEditor.open(i));
+            
+            // Drag and Drop Events
+            tile.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', i);
+                tile.classList.add('dragging');
+            });
+            tile.addEventListener('dragend', () => {
+                tile.classList.remove('dragging');
+                document.querySelectorAll('.img-edit-tile').forEach(t => t.classList.remove('drag-over'));
+            });
+            tile.addEventListener('dragover', e => {
+                e.preventDefault();
+                tile.classList.add('drag-over');
+            });
+            tile.addEventListener('dragleave', () => {
+                tile.classList.remove('drag-over');
+            });
+            tile.addEventListener('drop', e => {
+                e.preventDefault();
+                tile.classList.remove('drag-over');
+                const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                const toIdx = i;
+                
+                if (fromIdx !== toIdx && !isNaN(fromIdx)) {
+                    swapImages(fromIdx, toIdx);
+                }
+            });
+        } else {
+            tile.className = 'img-edit-tile empty-slot';
+            tile.innerHTML = `
+                <div class="empty-icon-wrap"><i data-lucide="plus"></i></div>
+                <small>Adicionar</small>
+            `;
+            tile.addEventListener('click', () => {
+                APP.addingToSlot = { montageIdx: APP.currentMontageIdx, slotIdx: i };
+                closeEditor();
+                toast('Selecione uma imagem para preencher o espaço', 'info');
+            });
+        }
+        
         grid.appendChild(tile);
+    }
+    
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function swapImages(fromIdx, toIdx) {
+    const need = LAYOUTS[APP.layout].count;
+    const flatFrom = APP.currentMontageIdx * need + fromIdx;
+    const flatTo = APP.currentMontageIdx * need + toIdx;
+    
+    // Check if target is not empty, can't swap with nothing in a pure array without padding
+    // But actually, if they drag a real image to an empty slot, they shouldn't swap.
+    // They should just move it there? But moving shifts array.
+    // It's better to prevent dropping onto an empty slot if it's tricky, or pad the array.
+    if (flatTo >= APP.selectedImages.length || flatFrom >= APP.selectedImages.length) {
+        toast('Não é possível arrastar para um espaço vazio', 'error');
+        return;
+    }
+
+    const temp = APP.selectedImages[flatFrom];
+    APP.selectedImages[flatFrom] = APP.selectedImages[flatTo];
+    APP.selectedImages[flatTo] = temp;
+    
+    buildMontages();
+    updateSelectionBadges();
+    updateSelectionBar();
+    loadCurrentMontageImages().then(() => {
+        renderCanvas();
+        renderImageEditGrid();
     });
 }

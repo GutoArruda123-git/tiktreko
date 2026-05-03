@@ -25,6 +25,7 @@ const APP = {
     montages: [],
     currentMontageIdx: 0,
     loadedCanvasImages: [],
+    addingToSlot: null,
 };
 
 const LAYOUTS = {
@@ -281,6 +282,37 @@ function renderGallery(photos, append) {
 
 function toggleSelect(photo, el) {
     const idx = APP.selectedImages.findIndex(s => s.id === photo.id);
+    
+    if (APP.addingToSlot) {
+        if (idx >= 0) {
+            toast('Esta imagem já está na seleção!', 'error');
+            return;
+        }
+        const newImg = {
+            id: photo.id,
+            url: photo.src.large2x || photo.src.large,
+            thumb: photo.src.medium,
+            photographer: photo.photographer,
+        };
+        const need = LAYOUTS[APP.layout].count;
+        const flatIdx = APP.addingToSlot.montageIdx * need + APP.addingToSlot.slotIdx;
+        
+        APP.selectedImages.splice(flatIdx, 0, newImg);
+        APP.addingToSlot = null;
+        
+        updateSelectionBadges();
+        updateSelectionBar();
+        
+        buildMontages();
+        document.getElementById('searchSection').classList.add('hidden');
+        document.getElementById('editorSection').classList.remove('hidden');
+        updateBatchNav();
+        loadCurrentMontageImages().then(() => { renderCanvas(); renderImageEditGrid(); });
+        
+        toast('Imagem adicionada!', 'success');
+        return;
+    }
+
     if (idx >= 0) {
         APP.selectedImages.splice(idx, 1);
     } else {
@@ -314,14 +346,14 @@ function updateSelectionBar() {
     const bar = document.getElementById('selectionBar');
     const count = APP.selectedImages.length;
     const need = LAYOUTS[APP.layout].count;
-    const montageNum = Math.floor(count / need);
+    const montageNum = Math.ceil(count / need);
 
     if (count > 0) bar.classList.remove('hidden'); else bar.classList.add('hidden');
 
     document.getElementById('selCount').textContent = count;
     document.getElementById('montageCount').textContent =
-        montageNum > 0 ? `${montageNum} montagem${montageNum > 1 ? 'ns' : ''}` : `selecione ${need} por montagem`;
-    document.getElementById('goToEditorBtn').disabled = count < need;
+        montageNum > 0 ? `${montageNum} montagem${montageNum > 1 ? 'ns' : ''}` : `selecione fotos`;
+    document.getElementById('goToEditorBtn').disabled = count < 1;
 
     // Render thumbs with group dividers
     const thumbsContainer = document.getElementById('selectionThumbs');
@@ -355,7 +387,7 @@ function buildMontages() {
     APP.montages = [];
     const need = LAYOUTS[APP.layout].count;
     const imgs = [...APP.selectedImages];
-    while (imgs.length >= need) {
+    while (imgs.length > 0) {
         APP.montages.push(imgs.splice(0, need));
     }
     APP.currentMontageIdx = 0;
@@ -391,8 +423,7 @@ function updateBatchNav() {
 
 // ===== Editor =====
 function openEditor() {
-    const need = LAYOUTS[APP.layout].count;
-    if (APP.selectedImages.length < need) { toast('Selecione pelo menos ' + need + ' imagem(ns)!', 'error'); return; }
+    if (APP.selectedImages.length < 1) { toast('Selecione pelo menos 1 imagem!', 'error'); return; }
     buildMontages();
     document.getElementById('searchSection').classList.add('hidden');
     document.getElementById('editorSection').classList.remove('hidden');

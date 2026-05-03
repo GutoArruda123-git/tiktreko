@@ -442,6 +442,32 @@ input[type="range"]::-webkit-slider-thumb {
     font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
 }
 
+/* Empty Slots & Drag and Drop */
+.img-edit-tile.empty-slot {
+    border: 2px dashed var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); gap: 8px;
+}
+.img-edit-tile.empty-slot:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+.empty-icon-wrap {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--bg-card);
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+}
+.img-edit-tile.dragging {
+    opacity: 0.4;
+}
+.img-edit-tile.drag-over {
+    border: 2px dashed var(--accent-pink);
+    transform: scale(1.02);
+}
 /* ===== Image Editor Modal ===== */
 .img-editor-card {
     background: var(--bg-glass); backdrop-filter: blur(32px);
