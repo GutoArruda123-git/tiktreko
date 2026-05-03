@@ -54,7 +54,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 showModal();
             } else {
                 hideModal();
-                // Optional: run a default search
+                // Trigger a default search
+                if (document.getElementById('galleryGrid').innerHTML === '') {
+                    searchImages('beautiful hair balayage');
+                }
             }
         }
     });
@@ -85,6 +88,7 @@ function bindEvents() {
         if (success) {
             hideModal();
             toast('API Key salva na nuvem! ✨', 'success');
+            searchImages('beautiful hair balayage');
         } else {
             toast('Erro ao salvar API Key.', 'error');
         }
