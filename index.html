@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TikTreko - Crie montagens 5 Notis para TikTok com imagens sem direitos autorais">
+    <title>TikTreko - Montagem 5 Notis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Bebas+Neue&family=Black+Ops+One&family=Bungee&family=Impact&family=Inter:wght@400;500;600;700;800;900&family=Lilita+One&family=Lobster&family=Outfit:wght@400;500;600;700;800;900&family=Pacifico&family=Permanent+Marker&family=Poppins:wght@400;600;700;800;900&family=Righteous&family=Russo+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- API Key Modal -->
+    <div id="apiKeyModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-icon"><i data-lucide="key"></i></div>
+            <h2>Configure sua API Key</h2>
+            <p>Para pesquisar imagens gratuitas, você precisa de uma API key do <strong>Pexels</strong> (grátis!).</p>
+            <ol class="modal-steps">
+                <li>Acesse <a href="https://www.pexels.com/api/" target="_blank">pexels.com/api</a></li>
+                <li>Crie uma conta gratuita</li>
+                <li>Copie sua API key</li>
+                <li>Cole abaixo:</li>
+            </ol>
+            <input type="text" id="apiKeyInput" placeholder="Cole sua API key do Pexels aqui..." autocomplete="off">
+            <button id="saveApiKeyBtn" class="btn-primary">Salvar e Começar <i data-lucide="rocket"></i></button>
+            <p class="modal-note">A key fica salva no seu navegador.</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header id="appHeader">
+        <div class="header-content">
+            <a href="/" class="logo">
+                <i data-lucide="sparkles" class="logo-icon"></i>
+                <h1>TikTreko</h1>
+                <span class="logo-badge">5 Notis</span>
+            </a>
+            <div class="header-actions">
+                <button id="changeApiKeyBtn" class="btn-ghost" title="Alterar API Key"><i data-lucide="key"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="appMain">
+        <!-- Step 1: Search & Select -->
+        <section id="searchSection" class="section">
+            <div class="section-header">
+                <div class="step-badge">1</div>
+                <div>
+                    <h2>Buscar Imagens</h2>
+                    <p>Escolha uma categoria ou pesquise. Selecione múltiplos de 4 para montagens em lote!</p>
+                </div>
+            </div>
+
+            <!-- Categories -->
+            <div class="categories-grid" id="categoriesGrid">
+                <button class="category-btn" data-query="beautiful hair balayage highlights">
+                    <i data-lucide="scissors" class="cat-icon"></i><span class="cat-label">Cabelo</span>
+                </button>
+                <button class="category-btn" data-query="nail art manicure beautiful nails">
+                    <i data-lucide="sparkles" class="cat-icon"></i><span class="cat-label">Unhas</span>
+                </button>
+                <button class="category-btn" data-query="makeup lips lipstick beauty">
+                    <i data-lucide="brush" class="cat-icon"></i><span class="cat-label">Maquiagem</span>
+                </button>
+                <button class="category-btn" data-query="skin care beauty face glow">
+                    <i data-lucide="sparkles" class="cat-icon"></i><span class="cat-label">Pele</span>
+                </button>
+                <button class="category-btn" data-query="young couple romantic love hug">
+                    <i data-lucide="heart-handshake" class="cat-icon"></i><span class="cat-label">Casais</span>
+                </button>
+                <button class="category-btn" data-query="gift box roses flowers romantic">
+                    <i data-lucide="gift" class="cat-icon"></i><span class="cat-label">Presentes</span>
+                </button>
+                <button class="category-btn" data-query="fashion dress elegant outfit">
+                    <i data-lucide="shirt" class="cat-icon"></i><span class="cat-label">Vestidos</span>
+                </button>
+                <button class="category-btn" data-query="aesthetic fashion teen style">
+                    <i data-lucide="flower" class="cat-icon"></i><span class="cat-label">Aesthetic</span>
+                </button>
+                <button class="category-btn" data-query="curly hair texture waves">
+                    <i data-lucide="waves" class="cat-icon"></i><span class="cat-label">Cachos</span>
+                </button>
+                <button class="category-btn" data-query="eye makeup eyeliner eyeshadow">
+                    <i data-lucide="eye" class="cat-icon"></i><span class="cat-label">Olhos</span>
+                </button>
+                <button class="category-btn" data-query="perfume fragrance bottle luxury">
+                    <i data-lucide="flask-conical" class="cat-icon"></i><span class="cat-label">Perfume</span>
+                </button>
+                <button class="category-btn" data-query="sneakers shoes fashion street">
+                    <i data-lucide="footprints" class="cat-icon"></i><span class="cat-label">Tênis</span>
+                </button>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Ou pesquise qualquer coisa..." autocomplete="off">
+                <button id="searchBtn" class="btn-primary"><i data-lucide="search" class="icon-inline"></i> Buscar</button>
+            </div>
+
+            <!-- Selection Bar -->
+            <div id="selectionBar" class="selection-bar hidden">
+                <div class="selection-info">
+                    <span class="selection-count"><span id="selCount">0</span> selecionadas</span>
+                    <span class="selection-montages" id="montageCount">0 montagens</span>
+                    <button id="clearSelectionBtn" class="btn-ghost-small">Limpar</button>
+                </div>
+                <div class="selection-thumbs" id="selectionThumbs"></div>
+                <button id="goToEditorBtn" class="btn-accent" disabled>Montar <i data-lucide="arrow-right" class="icon-inline"></i></button>
+            </div>
+
+            <!-- Gallery -->
+            <div id="galleryContainer" class="gallery-container">
+                <div id="galleryGrid" class="gallery-grid"></div>
+                <div id="loadingIndicator" class="loading hidden">
+                    <div class="spinner"></div><p>Buscando imagens...</p>
+                </div>
+                <div id="emptyState" class="empty-state">
+                    <div class="empty-icon"><i data-lucide="camera"></i></div>
+                    <p>Escolha uma categoria acima ou pesquise para começar</p>
+                </div>
+                <button id="loadMoreBtn" class="btn-secondary hidden">Carregar mais imagens</button>
+            </div>
+        </section>
+
+        <!-- Step 2: Editor -->
+        <section id="editorSection" class="section hidden">
+            <div class="section-header">
+                <button id="backToSearchBtn" class="btn-ghost"><i data-lucide="arrow-left" class="icon-inline"></i> Voltar</button>
+                <div>
+                    <div class="step-badge">2</div>
+                    <h2>Editor de Montagem</h2>
+                    <p id="editorSubtitle"></p>
+                </div>
+            </div>
+
+            <div class="editor-layout">
+                <!-- Canvas Preview Area -->
+                <div class="preview-area">
+                    <!-- Batch Navigation -->
+                    <div id="batchNav" class="batch-nav hidden">
+                        <button id="prevMontageBtn" class="btn-ghost"><i data-lucide="arrow-left" class="icon-inline"></i> Anterior</button>
+                        <span id="batchIndicator">1 / 1</span>
+                        <button id="nextMontageBtn" class="btn-ghost">Próxima <i data-lucide="arrow-right" class="icon-inline"></i></button>
+                    </div>
+                    <div class="preview-wrapper">
+                        <canvas id="montageCanvas" width="1080" height="1920"></canvas>
+                    </div>
+                </div>
+
+                <!-- Editor Controls -->
+                <div class="editor-controls">
+                    <!-- Layout -->
+                    <div class="control-group">
+                        <h3><i data-lucide="ruler"></i> Layout da Montagem</h3>
+                        <p class="control-hint">Escolha quantas imagens por montagem</p>
+                        <div class="layout-picker" id="layoutPicker">
+                            <button class="layout-btn" data-layout="1x1" data-cols="1" data-rows="1"><div class="lp-grid" style="grid-template:1fr/1fr"><i></i></div><span>Solo</span></button>
+                            <button class="layout-btn" data-layout="1x2" data-cols="1" data-rows="2"><div class="lp-grid" style="grid-template:1fr 1fr/1fr"><i></i><i></i></div><span>1×2</span></button>
+                            <button class="layout-btn" data-layout="2x1" data-cols="2" data-rows="1"><div class="lp-grid" style="grid-template:1fr/1fr 1fr"><i></i><i></i></div><span>2×1</span></button>
+                            <button class="layout-btn active" data-layout="2x2" data-cols="2" data-rows="2"><div class="lp-grid" style="grid-template:1fr 1fr/1fr 1fr"><i></i><i></i><i></i><i></i></div><span>2×2</span></button>
+                            <button class="layout-btn" data-layout="2x3" data-cols="2" data-rows="3"><div class="lp-grid" style="grid-template:1fr 1fr 1fr/1fr 1fr"><i></i><i></i><i></i><i></i><i></i><i></i></div><span>2×3</span></button>
+                            <button class="layout-btn" data-layout="3x3" data-cols="3" data-rows="3"><div class="lp-grid" style="grid-template:repeat(3,1fr)/repeat(3,1fr)"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>3×3</span></button>
+                            <button class="layout-btn" data-layout="3x4" data-cols="3" data-rows="4"><div class="lp-grid" style="grid-template:repeat(4,1fr)/repeat(3,1fr)"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>3×4</span></button>
+                            <button class="layout-btn" data-layout="4x4" data-cols="4" data-rows="4"><div class="lp-grid" style="grid-template:repeat(4,1fr)/repeat(4,1fr)"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>4×4</span></button>
+                        </div>
+                    </div>
+
+                    <!-- Text Content -->
+                    <div class="control-group">
+                        <h3><i data-lucide="type"></i> Texto da Montagem</h3>
+
+                        <label>Template:</label>
+                        <div class="template-buttons" id="templateButtons">
+                            <button class="template-btn active" data-template="notis">DE QUEM DER 5 NOTIS</button>
+                            <button class="template-btn" data-template="seguir">DE QUEM SEGUIR E COMPARTILHAR</button>
+                            <button class="template-btn" data-template="curtir">DE QUEM CURTIR E SALVAR</button>
+                            <button class="template-btn" data-template="so">SÓ DE QUEM DER 5 NOTIS</button>
+                            <button class="template-btn" data-template="custom"><i data-lucide="pen" class="icon-inline"></i> Personalizado</button>
+                            <button class="template-btn" data-template="none"><i data-lucide="ban" class="icon-inline"></i> Sem Texto</button>
+                        </div>
+
+                        <div class="row-2">
+                            <div>
+                                <label for="monthSelect">Mês:</label>
+                                <select id="monthSelect">
+                                    <option value="JANEIRO">Janeiro</option>
+                                    <option value="FEVEREIRO">Fevereiro</option>
+                                    <option value="MARÇO">Março</option>
+                                    <option value="ABRIL">Abril</option>
+                                    <option value="MAIO">Maio</option>
+                                    <option value="JUNHO">Junho</option>
+                                    <option value="JULHO">Julho</option>
+                                    <option value="AGOSTO">Agosto</option>
+                                    <option value="SETEMBRO">Setembro</option>
+                                    <option value="OUTUBRO">Outubro</option>
+                                    <option value="NOVEMBRO">Novembro</option>
+                                    <option value="DEZEMBRO">Dezembro</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Emojis:</label>
+                                <div class="emoji-picker" id="emojiPicker">
+                                    <button class="emoji-btn active" data-emoji="🍀💕">🍀💕</button>
+                                    <button class="emoji-btn" data-emoji="❤️🍀">❤️🍀</button>
+                                    <button class="emoji-btn" data-emoji="💕🍀">💕🍀</button>
+                                    <button class="emoji-btn" data-emoji="✨💕">✨💕</button>
+                                    <button class="emoji-btn" data-emoji="💗🌸">💗🌸</button>
+                                    <button class="emoji-btn" data-emoji="">Nenhum</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="customTextGroup" class="hidden">
+                            <label for="customText">Texto personalizado:</label>
+                            <input type="text" id="customText" placeholder="Ex: MAIO SÓ DE QUEM DER 5 NOTIS">
+                        </div>
+                    </div>
+
+                    <!-- Font & Style -->
+                    <div class="control-group">
+                        <h3><i data-lucide="palette"></i> Fonte & Estilo</h3>
+
+                        <label>Família da Fonte:</label>
+                        <div class="font-picker" id="fontPicker">
+                            <button class="font-btn active" data-font="'Outfit', sans-serif" style="font-family:'Outfit'">Outfit</button>
+                            <button class="font-btn" data-font="'Inter', sans-serif" style="font-family:'Inter'">Inter</button>
+                            <button class="font-btn" data-font="'Poppins', sans-serif" style="font-family:'Poppins'">Poppins</button>
+                            <button class="font-btn" data-font="'Bebas Neue', sans-serif" style="font-family:'Bebas Neue'">Bebas</button>
+                            <button class="font-btn" data-font="'Anton', sans-serif" style="font-family:'Anton'">Anton</button>
+                            <button class="font-btn" data-font="'Russo One', sans-serif" style="font-family:'Russo One'">Russo</button>
+                            <button class="font-btn" data-font="'Righteous', sans-serif" style="font-family:'Righteous'">Righteous</button>
+                            <button class="font-btn" data-font="'Bangers', sans-serif" style="font-family:'Bangers'">Bangers</button>
+                            <button class="font-btn" data-font="'Permanent Marker', cursive" style="font-family:'Permanent Marker'">Marker</button>
+                            <button class="font-btn" data-font="'Lilita One', sans-serif" style="font-family:'Lilita One'">Lilita</button>
+                            <button class="font-btn" data-font="'Lobster', cursive" style="font-family:'Lobster'">Lobster</button>
+                            <button class="font-btn" data-font="'Black Ops One', sans-serif" style="font-family:'Black Ops One'">Ops</button>
+                            <button class="font-btn" data-font="'Bungee', sans-serif" style="font-family:'Bungee'">Bungee</button>
+                            <button class="font-btn" data-font="Impact, sans-serif" style="font-family:Impact">Impact</button>
+                        </div>
+
+                        <label for="fontSizeRange">Tamanho: <span id="fontSizeValue">72</span>px</label>
+                        <input type="range" id="fontSizeRange" min="30" max="140" value="72">
+
+                        <label for="fontWeightSelect">Peso da Fonte:</label>
+                        <select id="fontWeightSelect">
+                            <option value="400">Regular (400)</option>
+                            <option value="600">Semibold (600)</option>
+                            <option value="700">Bold (700)</option>
+                            <option value="800">Extra Bold (800)</option>
+                            <option value="900" selected>Black (900)</option>
+                        </select>
+
+                        <label>Cor do Texto:</label>
+                        <div class="color-options" id="textColorPicker">
+                            <button class="color-btn active" data-color="#ffffff" style="background:#fff; border:1px solid #555"></button>
+                            <button class="color-btn" data-color="#000000" style="background:#000"></button>
+                            <button class="color-btn" data-color="#ec4899" style="background:#ec4899"></button>
+                            <button class="color-btn" data-color="#f43f5e" style="background:#f43f5e"></button>
+                            <button class="color-btn" data-color="#facc15" style="background:#facc15"></button>
+                            <button class="color-btn" data-color="#22c55e" style="background:#22c55e"></button>
+                            <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6"></button>
+                            <button class="color-btn" data-color="#a855f7" style="background:#a855f7"></button>
+                            <input type="color" id="textColorCustom" class="color-input" value="#ffffff" title="Cor personalizada">
+                        </div>
+                    </div>
+
+                    <!-- Outline & Background -->
+                    <div class="control-group">
+                        <h3><i data-lucide="pen-tool"></i> Contorno & Tarja</h3>
+
+                        <div class="toggle-row">
+                            <label>Contorno do texto:</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="outlineToggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div id="outlineControls">
+                            <label for="outlineWidth">Espessura: <span id="outlineValue">8</span>px</label>
+                            <input type="range" id="outlineWidth" min="1" max="25" value="8">
+                            <label>Cor do contorno:</label>
+                            <div class="color-options" id="outlineColorPicker">
+                                <button class="color-btn active" data-color="#000000" style="background:#000"></button>
+                                <button class="color-btn" data-color="#1a1a2e" style="background:#1a1a2e"></button>
+                                <button class="color-btn" data-color="#ffffff" style="background:#fff; border:1px solid #555"></button>
+                                <button class="color-btn" data-color="#ec4899" style="background:#ec4899"></button>
+                                <input type="color" id="outlineColorCustom" class="color-input" value="#000000" title="Cor personalizada">
+                            </div>
+                        </div>
+
+                        <hr class="divider">
+
+                        <div class="toggle-row">
+                            <label>Tarja preta atrás do texto:</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="bandToggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div id="bandControls">
+                            <label for="bandOpacity">Opacidade: <span id="bandOpacityValue">35</span>%</label>
+                            <input type="range" id="bandOpacity" min="0" max="100" value="35">
+                            <label>Cor da tarja:</label>
+                            <div class="color-options" id="bandColorPicker">
+                                <button class="color-btn active" data-color="#000000" style="background:#000"></button>
+                                <button class="color-btn" data-color="#1a1a2e" style="background:#1a1a2e"></button>
+                                <button class="color-btn" data-color="#ffffff" style="background:#fff; border:1px solid #555"></button>
+                                <button class="color-btn" data-color="#ec4899" style="background:#ec4899"></button>
+                            </div>
+                        </div>
+
+                        <hr class="divider">
+
+                        <label for="textYRange">Posição vertical: <span id="textYValue">50</span>%</label>
+                        <input type="range" id="textYRange" min="15" max="85" value="50">
+                    </div>
+
+                    <!-- Image Editing -->
+                    <div class="control-group">
+                        <h3><i data-lucide="image"></i> Editar Imagens</h3>
+                        <p class="control-hint">Clique para cortar, aplicar filtros e ajustar cada imagem</p>
+                        <div class="image-edit-grid" id="imageEditGrid"></div>
+                    </div>
+
+                    <!-- Download -->
+                    <div class="control-group download-group">
+                        <button id="downloadBtn" class="btn-download"><i data-lucide="download" class="icon-inline"></i> Baixar Montagem Atual</button>
+                        <button id="downloadAllBtn" class="btn-download-all hidden"><i data-lucide="package" class="icon-inline"></i> Baixar TODAS as Montagens</button>
+                        <button id="newMontageBtn" class="btn-secondary-full"><i data-lucide="refresh-cw" class="icon-inline"></i> Nova Montagem</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Image Editor Modal -->
+    <div id="imgEditorModal" class="modal-overlay hidden">
+        <div class="img-editor-card">
+            <div class="img-editor-header">
+                <h2><i data-lucide="crop"></i> Editar Imagem</h2>
+                <button id="imgEditorClose" class="btn-ghost"><i data-lucide="x"></i></button>
+            </div>
+            <div class="img-editor-body">
+                <!-- Crop Area -->
+                <div class="crop-area">
+                    <canvas id="cropCanvas" width="400" height="500"></canvas>
+                    <div class="crop-hint">Arraste para posicionar • Scroll para zoom</div>
+                </div>
+                <!-- Controls -->
+                <div class="img-editor-controls">
+                    <div class="iec-group">
+                        <h4><i data-lucide="zoom-in"></i> Corte & Zoom</h4>
+                        <label>Zoom: <span id="zoomValue">100</span>%</label>
+                        <input type="range" id="zoomRange" min="100" max="300" value="100">
+                        <div class="crop-reset-row">
+                            <button id="cropResetBtn" class="btn-ghost-small"><i data-lucide="rotate-ccw" class="icon-inline"></i> Resetar posição</button>
+                        </div>
+                    </div>
+                    <div class="iec-group">
+                        <h4><i data-lucide="sliders"></i> Ajustes</h4>
+                        <label>Brilho: <span id="brightnessValue">100</span>%</label>
+                        <input type="range" id="brightnessRange" min="30" max="200" value="100">
+                        <label>Contraste: <span id="contrastValue">100</span>%</label>
+                        <input type="range" id="contrastRange" min="30" max="200" value="100">
+                        <label>Saturação: <span id="saturateValue">100</span>%</label>
+                        <input type="range" id="saturateRange" min="0" max="200" value="100">
+                    </div>
+                    <div class="iec-group">
+                        <h4><i data-lucide="sparkles"></i> Filtros</h4>
+                        <div class="filter-presets" id="filterPresets">
+                            <button class="filter-btn active" data-filter="normal">Normal</button>
+                            <button class="filter-btn" data-filter="warm">Quente</button>
+                            <button class="filter-btn" data-filter="cool">Frio</button>
+                            <button class="filter-btn" data-filter="bw">P&B</button>
+                            <button class="filter-btn" data-filter="vintage">Vintage</button>
+                            <button class="filter-btn" data-filter="pink">Rosa</button>
+                            <button class="filter-btn" data-filter="vivid">Vívido</button>
+                            <button class="filter-btn" data-filter="soft">Suave</button>
+                            <button class="filter-btn" data-filter="dramatic">Dramático</button>
+                        </div>
+                    </div>
+                    <button id="imgEditorApply" class="btn-primary" style="width:100%;justify-content:center"><i data-lucide="check" class="icon-inline"></i> Aplicar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="img-editor.js"></script>
+    <script src="app.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+      lucide.createIcons();
+    </script>
+</body>
+</html>
