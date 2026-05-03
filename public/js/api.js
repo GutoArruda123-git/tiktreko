@@ -23,6 +23,16 @@ export async function loadKeys() {
     }
 }
 
+export async function validatePexelsKey(key) {
+    try {
+        const url = `https://api.pexels.com/v1/search?query=nature&per_page=1`;
+        const resp = await fetch(url, { headers: { 'Authorization': key } });
+        return resp.ok;
+    } catch (e) {
+        return false;
+    }
+}
+
 export async function saveKeys(pexelsKey) {
     if (!currentUser) return false;
     try {

@@ -1,4 +1,4 @@
-import { API_STATE, loadKeys, saveKeys, searchPexels } from './api.js';
+import { API_STATE, loadKeys, saveKeys, searchPexels, validatePexelsKey } from './api.js';
 import { ImgEditor, renderImageEditGrid } from './img-editor.js';
 
 // ===== TikTreko - App Logic =====
@@ -84,12 +84,32 @@ function bindEvents() {
         const key = document.getElementById('apiKeyInput').value.trim();
         if (!key) return toast('Cole sua API key!', 'error');
         
+        const btn = document.getElementById('saveApiKeyBtn');
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader" class="icon-inline spinner"></i> Validando...';
+        if (window.lucide) window.lucide.createIcons();
+
+        const isValid = await validatePexelsKey(key);
+        if (!isValid) {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+            if (window.lucide) window.lucide.createIcons();
+            toast('API Key inválida ou não autorizada.', 'error');
+            return;
+        }
+
         const success = await saveKeys(key);
         if (success) {
             hideModal();
             toast('API Key salva na nuvem! ✨', 'success');
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
             searchImages('beautiful hair balayage');
         } else {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+            if (window.lucide) window.lucide.createIcons();
             toast('Erro ao salvar API Key.', 'error');
         }
     });
