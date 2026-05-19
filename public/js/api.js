@@ -1,5 +1,5 @@
 import { db } from './firebase-config.js';
-import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { currentUser } from './auth.js';
 
 export const DEFAULT_PEXELS_KEY = 'GT4C95DArz9RdeYMsU2sHVTz8GqDeOLuCn84ganU';

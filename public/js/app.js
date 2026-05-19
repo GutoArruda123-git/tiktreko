@@ -1,5 +1,6 @@
 import { API_STATE, loadKeys, saveKeys, searchPexels, validatePexelsKey } from './api.js';
 import { ImgEditor, renderImageEditGrid } from './img-editor.js';
+import { autoSelectImages, getMontageHash, loadUsedHashes, saveUsedHashes } from './gemini.js';
 
 // ===== TikTreko - App Logic =====
 export const APP = {
@@ -28,6 +29,9 @@ export const APP = {
     currentMontageIdx: 0,
     loadedCanvasImages: [],
     addingToSlot: null,
+    // History
+    montageHistory: [],
+    usedMontageHashes: new Set(),
 };
 
 export const LAYOUTS = {
@@ -50,15 +54,20 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('auth-changed', async (e) => {
         if (e.detail.user) {
             await loadKeys();
+            loadHistory();
+            APP.usedMontageHashes = loadUsedHashes();
+            // Show tabs
+            document.getElementById('mainTabs').classList.remove('hidden');
             if (!API_STATE.pexelsKey) {
                 showModal();
             } else {
                 hideModal();
-                // Trigger a default search
                 if (document.getElementById('galleryGrid').innerHTML === '') {
                     searchImages('beautiful hair balayage');
                 }
             }
+        } else {
+            document.getElementById('mainTabs').classList.add('hidden');
         }
     });
 
@@ -253,6 +262,39 @@ function bindEvents() {
     // Download
     document.getElementById('downloadBtn').addEventListener('click', downloadCurrent);
     document.getElementById('downloadAllBtn').addEventListener('click', downloadAll);
+
+    // Auto Montage
+    document.getElementById('autoMontageOpenBtn').addEventListener('click', () => {
+        document.getElementById('autoMontageModal').classList.remove('hidden');
+        if (window.lucide) window.lucide.createIcons();
+    });
+    document.getElementById('autoMontageCloseBtn').addEventListener('click', () => {
+        document.getElementById('autoMontageModal').classList.add('hidden');
+    });
+    document.getElementById('autoMontageStartBtn').addEventListener('click', executeAutoMontage);
+
+    // Tab Navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const tab = btn.dataset.tab;
+            document.getElementById('searchSection').classList.toggle('hidden', tab !== 'search');
+            document.getElementById('historySection').classList.toggle('hidden', tab !== 'history');
+            document.getElementById('editorSection').classList.add('hidden');
+            if (tab === 'history') renderHistory();
+        });
+    });
+
+    // History clear
+    document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+        if (confirm('Tem certeza que deseja limpar todo o histórico?')) {
+            APP.montageHistory = [];
+            saveHistoryToStorage();
+            renderHistory();
+            toast('Histórico limpo!', 'success');
+        }
+    });
 }
 
 function bindColorPicker(containerId, customInputId, onChange) {
@@ -640,6 +682,17 @@ function downloadCurrent() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast('Montagem baixada! 🎉', 'success');
+
+        // Save to history
+        saveToHistory(canvas);
+
+        // Track dedup hash
+        const group = APP.montages[APP.currentMontageIdx];
+        if (group) {
+            const hash = getMontageHash(group.map(img => img.id));
+            APP.usedMontageHashes.add(hash);
+            saveUsedHashes(APP.usedMontageHashes);
+        }
     }, 'image/jpeg', 0.95);
 }
 
@@ -669,6 +722,16 @@ async function downloadAll() {
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
+
+                    // Save to history
+                    saveToHistory(canvas);
+
+                    // Track dedup hash
+                    const group = APP.montages[i];
+                    if (group) {
+                        const hash = getMontageHash(group.map(img => img.id));
+                        APP.usedMontageHashes.add(hash);
+                    }
                 }
                 resolve();
             }, 'image/jpeg', 0.95);
@@ -679,6 +742,186 @@ async function downloadAll() {
     }
 
     toast(`${total} montagens baixadas! 🎉🎉`, 'success');
+    saveUsedHashes(APP.usedMontageHashes);
+}
+
+// ===== Auto Montage =====
+async function executeAutoMontage() {
+    const category = document.getElementById('autoCategory').value.trim();
+    const numMontages = parseInt(document.getElementById('autoNumMontages').value) || 5;
+    const imagesPerMontage = parseInt(document.getElementById('autoImagesPerMontage').value) || 4;
+
+    if (!category) {
+        toast('Digite uma categoria ou busca!', 'error');
+        return;
+    }
+
+    // Map images per montage to layout
+    const layoutMap = { 1: '1x1', 2: '1x2', 4: '2x2', 6: '2x3', 9: '3x3', 12: '3x4', 16: '4x4' };
+    APP.layout = layoutMap[imagesPerMontage] || '2x2';
+    // Update layout picker UI
+    document.querySelectorAll('.layout-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.layout === APP.layout);
+    });
+
+    // Close modal, show loading
+    document.getElementById('autoMontageModal').classList.add('hidden');
+    const overlay = document.getElementById('aiLoadingOverlay');
+    const msgEl = document.getElementById('aiLoadingMsg');
+    overlay.classList.remove('hidden');
+
+    try {
+        const montageGroups = await autoSelectImages(
+            category, numMontages, imagesPerMontage,
+            (msg) => { msgEl.textContent = msg; }
+        );
+
+        // Set selected images from all groups
+        APP.selectedImages = montageGroups.flat();
+        updateSelectionBadges();
+        updateSelectionBar();
+
+        // Build montages and go to editor
+        buildMontages();
+        APP.currentMontageIdx = 0;
+
+        // Switch to search tab first (to hide history)
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.tab-btn[data-tab="search"]').classList.add('active');
+        document.getElementById('historySection').classList.add('hidden');
+
+        document.getElementById('searchSection').classList.add('hidden');
+        document.getElementById('editorSection').classList.remove('hidden');
+        updateBatchNav();
+        await loadCurrentMontageImages();
+        renderCanvas();
+        renderImageEditGrid();
+
+        toast(`${montageGroups.length} montagens geradas pela IA! 🤖✨`, 'success');
+    } catch (err) {
+        console.error('Auto montage error:', err);
+        toast(err.message || 'Erro ao gerar montagens com IA.', 'error');
+    } finally {
+        overlay.classList.add('hidden');
+    }
+}
+
+// ===== History =====
+function saveToHistory(canvas) {
+    // Create a smaller thumbnail
+    const thumbCanvas = document.createElement('canvas');
+    const thumbW = 270, thumbH = 480;
+    thumbCanvas.width = thumbW;
+    thumbCanvas.height = thumbH;
+    const tCtx = thumbCanvas.getContext('2d');
+    tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
+    const thumbDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.6);
+
+    const group = APP.montages[APP.currentMontageIdx];
+    const entry = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        timestamp: Date.now(),
+        thumbnailDataUrl: thumbDataUrl,
+        layout: APP.layout,
+        template: APP.template,
+        imageCount: group ? group.length : 0,
+    };
+
+    APP.montageHistory.unshift(entry);
+    // Keep max 100 entries to avoid localStorage overflow
+    if (APP.montageHistory.length > 100) {
+        APP.montageHistory = APP.montageHistory.slice(0, 100);
+    }
+    saveHistoryToStorage();
+}
+
+function saveHistoryToStorage() {
+    try {
+        localStorage.setItem('montageHistory', JSON.stringify(APP.montageHistory));
+    } catch (e) {
+        console.warn('Failed to save history to localStorage:', e);
+        // If storage is full, remove oldest entries
+        if (APP.montageHistory.length > 20) {
+            APP.montageHistory = APP.montageHistory.slice(0, 20);
+            try {
+                localStorage.setItem('montageHistory', JSON.stringify(APP.montageHistory));
+            } catch (e2) {
+                console.error('Still failed to save history:', e2);
+            }
+        }
+    }
+}
+
+function loadHistory() {
+    try {
+        const stored = localStorage.getItem('montageHistory');
+        APP.montageHistory = stored ? JSON.parse(stored) : [];
+    } catch {
+        APP.montageHistory = [];
+    }
+}
+
+function renderHistory() {
+    const grid = document.getElementById('historyGrid');
+    const empty = document.getElementById('historyEmpty');
+    grid.innerHTML = '';
+
+    if (APP.montageHistory.length === 0) {
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    APP.montageHistory.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'history-item';
+        const date = new Date(entry.timestamp);
+        const dateStr = date.toLocaleDateString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
+
+        div.innerHTML = `
+            <img src="${entry.thumbnailDataUrl}" alt="Montagem" loading="lazy">
+            <div class="history-item-info">
+                <div class="history-item-date">📅 ${dateStr}</div>
+                <div class="history-item-meta">${entry.layout} • ${entry.imageCount} imagens</div>
+            </div>
+            <div class="history-item-actions">
+                <button class="history-action-btn download-btn" title="Baixar">
+                    <i data-lucide="download" style="width:16px;height:16px"></i>
+                </button>
+                <button class="history-action-btn delete-btn" title="Excluir">
+                    <i data-lucide="trash-2" style="width:16px;height:16px"></i>
+                </button>
+            </div>
+        `;
+
+        // Download saved thumbnail
+        div.querySelector('.download-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const a = document.createElement('a');
+            a.href = entry.thumbnailDataUrl;
+            a.download = `tiktreko_history_${entry.id}.jpg`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            toast('Montagem baixada do histórico! 📦', 'success');
+        });
+
+        // Delete entry
+        div.querySelector('.delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            APP.montageHistory.splice(i, 1);
+            saveHistoryToStorage();
+            renderHistory();
+            toast('Montagem removida do histórico', 'info');
+        });
+
+        grid.appendChild(div);
+    });
+
+    if (window.lucide) window.lucide.createIcons();
 }
 
 // ===== Toast =====
