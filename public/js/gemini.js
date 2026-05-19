@@ -1,12 +1,25 @@
 import { app } from './firebase-config.js';
-import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-ai.js";
 import { searchPexels } from './api.js';
 
 // ===== Gemini AI Module =====
 let aiModel = null;
+let firebaseAI = null;
 
-function getModel() {
+async function loadFirebaseAI() {
+    if (!firebaseAI) {
+        try {
+            firebaseAI = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-ai.js");
+        } catch (e) {
+            console.error('Failed to load Firebase AI module:', e);
+            throw new Error('Módulo Firebase AI não disponível. Verifique se o Firebase AI Logic está ativado no console.');
+        }
+    }
+    return firebaseAI;
+}
+
+async function getModel() {
     if (!aiModel) {
+        const { getAI, getGenerativeModel, GoogleAIBackend } = await loadFirebaseAI();
         const ai = getAI(app, { backend: new GoogleAIBackend() });
         aiModel = getGenerativeModel(ai, { model: "gemini-2.0-flash" });
     }
@@ -136,7 +149,7 @@ Onde cada array interno contém os ÍNDICES das imagens (campo "index") que deve
 Retorne exatamente ${numMontages} montagens com ${imagesPerMontage} índices cada.`;
 
     // Step 3: Call Gemini
-    const model = getModel();
+    const model = await getModel();
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();
