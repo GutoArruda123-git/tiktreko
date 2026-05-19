@@ -1,5 +1,5 @@
 import { app } from './firebase-config.js';
-import { searchPexels } from './api.js';
+import { searchImages } from './api.js';
 
 // ===== Gemini AI Module =====
 let aiModel = null;
@@ -61,8 +61,8 @@ export function saveUsedHashes(hashSet) {
     }
 }
 
-// Fetch enough images from Pexels for the requested montages
-async function fetchEnoughImages(query, totalNeeded) {
+// Fetch enough images for the requested montages
+async function fetchEnoughImages(query, totalNeeded, source = 'pexels') {
     const allImages = [];
     const seenIds = new Set();
     let page = 1;
@@ -70,12 +70,13 @@ async function fetchEnoughImages(query, totalNeeded) {
 
     while (allImages.length < totalNeeded && page <= maxPages) {
         try {
-            const data = await searchPexels(query, page);
+            const data = await searchImages(query, page, source);
             if (!data.photos || data.photos.length === 0) break;
 
             for (const photo of data.photos) {
-                if (!seenIds.has(photo.id)) {
-                    seenIds.add(photo.id);
+                const id = String(photo.id);
+                if (!seenIds.has(id)) {
+                    seenIds.add(id);
                     allImages.push({
                         id: photo.id,
                         url: photo.src.large2x || photo.src.large,
@@ -85,14 +86,40 @@ async function fetchEnoughImages(query, totalNeeded) {
                     });
                 }
             }
+            if (!data.has_more) break;
             page++;
         } catch (e) {
             console.error('Error fetching images page', page, e);
+            if (['INVALID_KEY', 'NO_API_KEY', 'MISSING_GOOGLE_CONFIG', 'INVALID_GOOGLE_CONFIG'].includes(e.message)) {
+                throw e;
+            }
             break;
         }
     }
 
     return allImages;
+}
+
+function fallbackMontages(allImages, numMontages, imagesPerMontage, usedHashes) {
+    const sorted = [...allImages].sort((a, b) => {
+        const aText = `${a.photographer || ''} ${a.alt || ''} ${a.id}`;
+        const bText = `${b.photographer || ''} ${b.alt || ''} ${b.id}`;
+        return hashString(aText).localeCompare(hashString(bText));
+    });
+    const montageGroups = [];
+    let idx = 0;
+
+    while (montageGroups.length < numMontages && idx + imagesPerMontage <= sorted.length) {
+        const group = sorted.slice(idx, idx + imagesPerMontage);
+        const hash = getMontageHash(group.map(img => img.id));
+        idx += imagesPerMontage;
+        if (usedHashes.has(hash)) continue;
+        montageGroups.push(group);
+        usedHashes.add(hash);
+    }
+
+    saveUsedHashes(usedHashes);
+    return montageGroups;
 }
 
 /**
@@ -103,13 +130,13 @@ async function fetchEnoughImages(query, totalNeeded) {
  * @param {Function} onProgress - Progress callback (message)
  * @returns {Promise<Array<Array<Object>>>} - Array of montage groups
  */
-export async function autoSelectImages(query, numMontages, imagesPerMontage, onProgress = () => {}) {
+export async function autoSelectImages(query, numMontages, imagesPerMontage, onProgress = () => {}, source = 'pexels') {
     const totalNeeded = numMontages * imagesPerMontage;
     const usedHashes = loadUsedHashes();
 
     // Step 1: Fetch enough images
     onProgress(`Buscando imagens para "${query}"...`);
-    const allImages = await fetchEnoughImages(query, Math.max(totalNeeded * 2, 60));
+    const allImages = await fetchEnoughImages(query, Math.max(totalNeeded * 2, 60), source);
 
     if (allImages.length < totalNeeded) {
         throw new Error(`Só encontramos ${allImages.length} imagens, mas precisamos de ${totalNeeded}. Tente uma busca mais ampla.`);
@@ -148,11 +175,23 @@ Responda APENAS com um JSON válido no seguinte formato (sem markdown, sem expli
 Onde cada array interno contém os ÍNDICES das imagens (campo "index") que devem compor cada montagem.
 Retorne exatamente ${numMontages} montagens com ${imagesPerMontage} índices cada.`;
 
-    // Step 3: Call Gemini
-    const model = await getModel();
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
+    let text = '';
+    try {
+        // Step 3: Call Gemini
+        const model = await getModel();
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        text = response.text();
+    } catch (e) {
+        console.warn('Gemini indisponível, usando montagem automática local.', e);
+        onProgress('IA indisponível. Organizando automaticamente...');
+        const fallback = fallbackMontages(allImages, numMontages, imagesPerMontage, usedHashes);
+        if (fallback.length > 0) {
+            onProgress(`${fallback.length} montagens criadas automaticamente!`);
+            return fallback;
+        }
+        throw new Error('Não foi possível usar a IA nem montar automaticamente. Tente outra busca.');
+    }
 
     // Step 4: Parse response
     onProgress('Organizando montagens...');
@@ -164,10 +203,17 @@ Retorne exatamente ${numMontages} montagens com ${imagesPerMontage} índices cad
         parsed = JSON.parse(jsonMatch[0]);
     } catch (e) {
         console.error('Gemini response parsing error:', text);
+        const fallback = fallbackMontages(allImages, numMontages, imagesPerMontage, usedHashes);
+        if (fallback.length > 0) {
+            onProgress(`${fallback.length} montagens criadas automaticamente!`);
+            return fallback;
+        }
         throw new Error('A IA retornou uma resposta inválida. Tente novamente.');
     }
 
     if (!parsed.montages || !Array.isArray(parsed.montages)) {
+        const fallback = fallbackMontages(allImages, numMontages, imagesPerMontage, usedHashes);
+        if (fallback.length > 0) return fallback;
         throw new Error('Formato de resposta inválido da IA.');
     }
 

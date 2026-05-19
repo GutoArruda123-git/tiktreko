@@ -24,17 +24,21 @@
     <div id="apiKeyModal" class="modal-overlay hidden">
         <div class="modal-card">
             <div class="modal-icon"><i data-lucide="key"></i></div>
-            <h2>Configure sua API Key</h2>
-            <p>Para pesquisar imagens gratuitas, você precisa de uma API key do <strong>Pexels</strong> (grátis!).</p>
+            <h2>Configure suas APIs</h2>
+            <p>Use o <strong>Pexels</strong> para fotos livres e o <strong>Google Programmable Search</strong> para buscar imagens na web, Pinterest e Tumblr.</p>
             <ol class="modal-steps">
-                <li>Acesse <a href="https://www.pexels.com/api/" target="_blank">pexels.com/api</a></li>
-                <li>Crie uma conta gratuita</li>
-                <li>Copie sua API key</li>
-                <li>Cole abaixo:</li>
+                <li>Pexels: acesse <a href="https://www.pexels.com/api/" target="_blank">pexels.com/api</a></li>
+                <li>Google: crie uma busca em <a href="https://programmablesearchengine.google.com/" target="_blank">Programmable Search Engine</a></li>
+                <li>No Google, copie a API key e o Search Engine ID (cx)</li>
             </ol>
+            <label for="apiKeyInput">Pexels API key:</label>
             <input type="text" id="apiKeyInput" placeholder="Cole sua API key do Pexels aqui..." autocomplete="off">
+            <label for="googleApiKeyInput">Google Custom Search API key:</label>
+            <input type="text" id="googleApiKeyInput" placeholder="Opcional: API key do Google..." autocomplete="off">
+            <label for="googleCxInput">Google Search Engine ID (cx):</label>
+            <input type="text" id="googleCxInput" placeholder="Opcional: ID do mecanismo de busca..." autocomplete="off">
             <button id="saveApiKeyBtn" class="btn-primary">Salvar e Começar <i data-lucide="rocket"></i></button>
-            <p class="modal-note">A key fica salva no seu navegador.</p>
+            <p class="modal-note">As chaves ficam salvas no seu navegador e, se possível, na sua conta.</p>
         </div>
     </div>
 
@@ -187,6 +191,12 @@
 
             <!-- Search Bar -->
             <div class="search-bar">
+                <select id="searchSourceSelect" class="source-select" title="Fonte das imagens">
+                    <option value="pexels">Pexels</option>
+                    <option value="google">Google/Web</option>
+                    <option value="pinterest">Pinterest</option>
+                    <option value="tumblr">Tumblr</option>
+                </select>
                 <input type="text" id="searchInput" placeholder="Ou pesquise qualquer coisa..." autocomplete="off">
                 <button id="searchBtn" class="btn-primary"><i data-lucide="search" class="icon-inline"></i> Buscar</button>
             </div>

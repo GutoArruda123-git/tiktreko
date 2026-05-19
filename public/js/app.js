@@ -1,4 +1,4 @@
-import { API_STATE, loadKeys, saveKeys, searchPexels, validatePexelsKey } from './api.js';
+import { API_STATE, hasGoogleSearchConfig, loadKeys, saveKeys, searchImages as searchImageSource, validateGoogleSearchConfig, validatePexelsKey } from './api.js';
 import { ImgEditor, renderImageEditGrid } from './img-editor.js';
 import { autoSelectImages, getMontageHash, loadUsedHashes, saveUsedHashes } from './gemini.js';
 
@@ -7,6 +7,7 @@ export const APP = {
     selectedImages: [],
     currentQuery: '',
     currentPage: 1,
+    searchSource: localStorage.getItem('searchSource') || 'pexels',
     // Editor state
     template: 'notis',
     month: '',
@@ -58,7 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
             APP.usedMontageHashes = loadUsedHashes();
             // Show tabs
             document.getElementById('mainTabs').classList.remove('hidden');
-            if (!API_STATE.pexelsKey) {
+            syncSearchSourceUI();
+            if (!API_STATE.pexelsKey && !hasGoogleSearchConfig()) {
                 showModal();
             } else {
                 hideModal();
@@ -86,12 +88,21 @@ function setCurrentMonth() {
 
 function showModal() { document.getElementById('apiKeyModal').classList.remove('hidden'); }
 function hideModal() { document.getElementById('apiKeyModal').classList.add('hidden'); }
+function syncSearchSourceUI() {
+    const select = document.getElementById('searchSourceSelect');
+    if (select) select.value = APP.searchSource;
+}
 
 function bindEvents() {
     // API Key
     document.getElementById('saveApiKeyBtn').addEventListener('click', async () => {
         const key = document.getElementById('apiKeyInput').value.trim();
-        if (!key) return toast('Cole sua API key!', 'error');
+        const googleKey = document.getElementById('googleApiKeyInput').value.trim();
+        const googleCx = document.getElementById('googleCxInput').value.trim();
+        const pexelsKeyToSave = key || API_STATE.pexelsKey || '';
+        if (!pexelsKeyToSave && (!googleKey || !googleCx)) {
+            return toast('Cole a API key do Pexels ou configure Google API key + cx.', 'error');
+        }
         
         const btn = document.getElementById('saveApiKeyBtn');
         const originalContent = btn.innerHTML;
@@ -99,7 +110,7 @@ function bindEvents() {
         btn.innerHTML = '<i data-lucide="loader" class="icon-inline spinner"></i> Validando...';
         if (window.lucide) window.lucide.createIcons();
 
-        const isValid = await validatePexelsKey(key);
+        const isValid = pexelsKeyToSave ? await validatePexelsKey(pexelsKeyToSave) : true;
         if (!isValid) {
             btn.disabled = false;
             btn.innerHTML = originalContent;
@@ -108,10 +119,29 @@ function bindEvents() {
             return;
         }
 
-        const success = await saveKeys(key);
+        if ((googleKey || googleCx) && (!googleKey || !googleCx)) {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+            if (window.lucide) window.lucide.createIcons();
+            toast('Para usar Google, preencha API key e cx.', 'error');
+            return;
+        }
+
+        if (googleKey && googleCx) {
+            const googleValid = await validateGoogleSearchConfig(googleKey, googleCx);
+            if (!googleValid) {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+                if (window.lucide) window.lucide.createIcons();
+                toast('Configuração do Google inválida ou sem permissão.', 'error');
+                return;
+            }
+        }
+
+        const success = await saveKeys(pexelsKeyToSave, googleKey, googleCx);
         if (success) {
             hideModal();
-            toast('API Key salva na nuvem! ✨', 'success');
+            toast('APIs salvas! ✨', 'success');
             btn.disabled = false;
             btn.innerHTML = originalContent;
             searchImages('beautiful hair balayage');
@@ -124,6 +154,8 @@ function bindEvents() {
     });
     document.getElementById('changeApiKeyBtn').addEventListener('click', () => {
         document.getElementById('apiKeyInput').value = API_STATE.pexelsKey || '';
+        document.getElementById('googleApiKeyInput').value = API_STATE.googleSearchKey || '';
+        document.getElementById('googleCxInput').value = API_STATE.googleSearchCx || '';
         showModal();
     });
 
@@ -150,6 +182,18 @@ function bindEvents() {
     document.getElementById('loadMoreBtn').addEventListener('click', () => {
         APP.currentPage++;
         searchImages(APP.currentQuery, true);
+    });
+    document.getElementById('searchSourceSelect').addEventListener('change', e => {
+        APP.searchSource = e.target.value;
+        localStorage.setItem('searchSource', APP.searchSource);
+        if (APP.searchSource !== 'pexels' && !hasGoogleSearchConfig()) {
+            toast('Configure Google API key e cx para buscar na web.', 'info');
+            document.getElementById('googleApiKeyInput').value = API_STATE.googleSearchKey || '';
+            document.getElementById('googleCxInput').value = API_STATE.googleSearchCx || '';
+            showModal();
+            return;
+        }
+        if (APP.currentQuery) searchImages(APP.currentQuery);
     });
 
     // Selection
@@ -314,9 +358,14 @@ function bindColorPicker(containerId, customInputId, onChange) {
     }
 }
 
-// ===== Pexels API =====
+// ===== Image Search API =====
 async function searchImages(query, append = false) {
-    if (!API_STATE.pexelsKey) { showModal(); return; }
+    if (APP.searchSource === 'pexels' && !API_STATE.pexelsKey) { showModal(); return; }
+    if (APP.searchSource !== 'pexels' && !hasGoogleSearchConfig()) {
+        toast('Configure Google API key e cx para buscar nesta fonte.', 'error');
+        showModal();
+        return;
+    }
     if (!append) { APP.currentPage = 1; APP.currentQuery = query; document.getElementById('galleryGrid').innerHTML = ''; }
 
     document.getElementById('emptyState').classList.add('hidden');
@@ -324,9 +373,9 @@ async function searchImages(query, append = false) {
     document.getElementById('loadMoreBtn').classList.add('hidden');
 
     try {
-        const data = await searchPexels(query, APP.currentPage);
+        const data = await searchImageSource(query, APP.currentPage, APP.searchSource);
         renderGallery(data.photos, append);
-        if (data.photos.length > 0 && APP.currentPage * 30 < data.total_results) {
+        if (data.has_more) {
             document.getElementById('loadMoreBtn').classList.remove('hidden');
         }
     } catch (err) {
@@ -335,6 +384,12 @@ async function searchImages(query, append = false) {
             toast('API Key inválida!', 'error');
             showModal();
         } else if (err.message === "NO_API_KEY") {
+            showModal();
+        } else if (err.message === "MISSING_GOOGLE_CONFIG") {
+            toast('Configure Google API key e cx para buscar na web.', 'error');
+            showModal();
+        } else if (err.message === "INVALID_GOOGLE_CONFIG") {
+            toast('Configuração do Google inválida ou sem permissão.', 'error');
             showModal();
         } else {
             toast('Erro ao buscar imagens.', 'error');
@@ -356,7 +411,7 @@ function renderGallery(photos, append) {
         const div = document.createElement('div');
         div.className = 'gallery-item';
         div.dataset.id = photo.id;
-        const selIdx = APP.selectedImages.findIndex(s => s.id === photo.id);
+        const selIdx = APP.selectedImages.findIndex(s => String(s.id) === String(photo.id));
         if (selIdx >= 0) div.classList.add('selected');
         div.innerHTML = `
             <img src="${photo.src.medium}" alt="${photo.alt || ''}" loading="lazy">
@@ -370,7 +425,7 @@ function renderGallery(photos, append) {
 }
 
 function toggleSelect(photo, el) {
-    const idx = APP.selectedImages.findIndex(s => s.id === photo.id);
+    const idx = APP.selectedImages.findIndex(s => String(s.id) === String(photo.id));
     
     if (APP.addingToSlot) {
         if (idx >= 0) {
@@ -418,8 +473,8 @@ function toggleSelect(photo, el) {
 
 export function updateSelectionBadges() {
     document.querySelectorAll('.gallery-item').forEach(item => {
-        const id = parseInt(item.dataset.id);
-        const idx = APP.selectedImages.findIndex(s => s.id === id);
+        const id = item.dataset.id;
+        const idx = APP.selectedImages.findIndex(s => String(s.id) === String(id));
         const badge = item.querySelector('.select-badge');
         if (idx >= 0) {
             item.classList.add('selected');
@@ -455,14 +510,55 @@ export function updateSelectionBar() {
         }
         const thumb = document.createElement('div');
         thumb.className = 'sel-thumb';
+        thumb.draggable = true;
+        thumb.dataset.index = i;
         thumb.innerHTML = `<img src="${img.thumb}" alt=""><div class="sel-num">${i + 1}</div>`;
-        thumb.addEventListener('click', () => {
+        thumb.addEventListener('click', e => {
+            if (thumb.dataset.dragged === 'true') {
+                e.preventDefault();
+                thumb.dataset.dragged = 'false';
+                return;
+            }
             APP.selectedImages.splice(i, 1);
             updateSelectionBadges();
             updateSelectionBar();
         });
+        thumb.addEventListener('dragstart', e => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(i));
+            thumb.classList.add('dragging');
+        });
+        thumb.addEventListener('dragend', () => {
+            thumb.classList.remove('dragging');
+            thumb.dataset.dragged = 'true';
+            document.querySelectorAll('.sel-thumb').forEach(t => t.classList.remove('drag-over'));
+            setTimeout(() => { thumb.dataset.dragged = 'false'; }, 200);
+        });
+        thumb.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            thumb.classList.add('drag-over');
+        });
+        thumb.addEventListener('dragleave', () => {
+            thumb.classList.remove('drag-over');
+        });
+        thumb.addEventListener('drop', e => {
+            e.preventDefault();
+            thumb.classList.remove('drag-over');
+            const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+            reorderSelectedImages(fromIdx, i);
+        });
         thumbsContainer.appendChild(thumb);
     });
+}
+
+function reorderSelectedImages(fromIdx, toIdx) {
+    if (Number.isNaN(fromIdx) || fromIdx === toIdx) return;
+    if (fromIdx < 0 || toIdx < 0 || fromIdx >= APP.selectedImages.length || toIdx >= APP.selectedImages.length) return;
+    const [moved] = APP.selectedImages.splice(fromIdx, 1);
+    APP.selectedImages.splice(toIdx, 0, moved);
+    updateSelectionBadges();
+    updateSelectionBar();
 }
 
 function clearSelection() {
@@ -670,30 +766,35 @@ function drawImageCover(ctx, img, x, y, w, h) {
 // ===== Downloads =====
 function downloadCurrent() {
     const canvas = document.getElementById('montageCanvas');
-    canvas.toBlob(blob => {
-        if (!blob) { toast('Erro ao gerar imagem.', 'error'); return; }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const m = APP.month.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        a.download = `tiktreko_${m}_${APP.currentMontageIdx + 1}_${Date.now()}.jpg`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast('Montagem baixada! 🎉', 'success');
+    try {
+        canvas.toBlob(blob => {
+            if (!blob) { toast('Erro ao gerar imagem.', 'error'); return; }
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const m = APP.month.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            a.download = `tiktreko_${m}_${APP.currentMontageIdx + 1}_${Date.now()}.jpg`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast('Montagem baixada! 🎉', 'success');
 
-        // Save to history
-        saveToHistory(canvas);
+            // Save to history
+            saveToHistory(canvas);
 
-        // Track dedup hash
-        const group = APP.montages[APP.currentMontageIdx];
-        if (group) {
-            const hash = getMontageHash(group.map(img => img.id));
-            APP.usedMontageHashes.add(hash);
-            saveUsedHashes(APP.usedMontageHashes);
-        }
-    }, 'image/jpeg', 0.95);
+            // Track dedup hash
+            const group = APP.montages[APP.currentMontageIdx];
+            if (group) {
+                const hash = getMontageHash(group.map(img => img.id));
+                APP.usedMontageHashes.add(hash);
+                saveUsedHashes(APP.usedMontageHashes);
+            }
+        }, 'image/jpeg', 0.95);
+    } catch (e) {
+        console.error('Canvas export failed:', e);
+        toast('Uma imagem externa bloqueou o download. Tente outra imagem ou use Pexels.', 'error');
+    }
 }
 
 async function downloadAll() {
@@ -711,30 +812,36 @@ async function downloadAll() {
 
         const canvas = document.getElementById('montageCanvas');
         await new Promise(resolve => {
-            canvas.toBlob(blob => {
-                if (blob) {
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    const m = APP.month.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    a.download = `tiktreko_${m}_${i + 1}.jpg`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
+            try {
+                canvas.toBlob(blob => {
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const m = APP.month.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        a.download = `tiktreko_${m}_${i + 1}.jpg`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
 
-                    // Save to history
-                    saveToHistory(canvas);
+                        // Save to history
+                        saveToHistory(canvas);
 
-                    // Track dedup hash
-                    const group = APP.montages[i];
-                    if (group) {
-                        const hash = getMontageHash(group.map(img => img.id));
-                        APP.usedMontageHashes.add(hash);
+                        // Track dedup hash
+                        const group = APP.montages[i];
+                        if (group) {
+                            const hash = getMontageHash(group.map(img => img.id));
+                            APP.usedMontageHashes.add(hash);
+                        }
                     }
-                }
+                    resolve();
+                }, 'image/jpeg', 0.95);
+            } catch (e) {
+                console.error('Canvas export failed:', e);
+                toast('Uma imagem externa bloqueou uma montagem. Pulei este download.', 'error');
                 resolve();
-            }, 'image/jpeg', 0.95);
+            }
         });
 
         // Small delay between downloads
@@ -773,7 +880,8 @@ async function executeAutoMontage() {
     try {
         const montageGroups = await autoSelectImages(
             category, numMontages, imagesPerMontage,
-            (msg) => { msgEl.textContent = msg; }
+            (msg) => { msgEl.textContent = msg; },
+            APP.searchSource
         );
 
         // Set selected images from all groups
@@ -800,7 +908,15 @@ async function executeAutoMontage() {
         toast(`${montageGroups.length} montagens geradas pela IA! 🤖✨`, 'success');
     } catch (err) {
         console.error('Auto montage error:', err);
-        toast(err.message || 'Erro ao gerar montagens com IA.', 'error');
+        if (['INVALID_KEY', 'NO_API_KEY', 'MISSING_GOOGLE_CONFIG', 'INVALID_GOOGLE_CONFIG'].includes(err.message)) {
+            const msg = APP.searchSource === 'pexels'
+                ? 'Configure uma API key válida do Pexels para auto montar.'
+                : 'Configure Google API key e cx para auto montar com esta fonte.';
+            toast(msg, 'error');
+            showModal();
+        } else {
+            toast(err.message || 'Erro ao gerar montagens.', 'error');
+        }
     } finally {
         overlay.classList.add('hidden');
     }
@@ -814,8 +930,14 @@ function saveToHistory(canvas) {
     thumbCanvas.width = thumbW;
     thumbCanvas.height = thumbH;
     const tCtx = thumbCanvas.getContext('2d');
-    tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
-    const thumbDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.6);
+    let thumbDataUrl = '';
+    try {
+        tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
+        thumbDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.6);
+    } catch (e) {
+        console.warn('Could not save montage thumbnail:', e);
+        return;
+    }
 
     const group = APP.montages[APP.currentMontageIdx];
     const entry = {
