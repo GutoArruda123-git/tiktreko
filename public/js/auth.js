@@ -23,12 +23,10 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // Login Elements
 const googleLoginBtn = document.getElementById('googleLoginBtn');
-const emailLoginBtn = document.getElementById('emailLoginBtn');
 const emailInput = document.getElementById('emailInput');
 const passwordInput = document.getElementById('passwordInput');
 
 // Register Elements
-const emailRegisterBtn = document.getElementById('emailRegisterBtn');
 const regEmailInput = document.getElementById('regEmailInput');
 const regPasswordInput = document.getElementById('regPasswordInput');
 
@@ -50,18 +48,27 @@ showLoginBtn.addEventListener('click', (e) => {
 
 // Providers
 const googleProvider = new GoogleAuthProvider();
+let googleLoginInProgress = false;
 
 // Google Login
 googleLoginBtn.addEventListener('click', async () => {
+    if (googleLoginInProgress) return;
+    googleLoginInProgress = true;
+    googleLoginBtn.disabled = true;
+
     try {
         await signInWithPopup(auth, googleProvider);
     } catch (error) {
         showToast("Erro ao fazer login com Google: " + error.message, 'error');
+    } finally {
+        googleLoginInProgress = false;
+        googleLoginBtn.disabled = false;
     }
 });
 
 // Email Login
-emailLoginBtn.addEventListener('click', async () => {
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     const email = emailInput.value;
     const password = passwordInput.value;
     if (!email || !password) return showToast("Preencha email e senha", "error");
@@ -74,7 +81,8 @@ emailLoginBtn.addEventListener('click', async () => {
 });
 
 // Email Register
-emailRegisterBtn.addEventListener('click', async () => {
+registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     const email = regEmailInput.value;
     const password = regPasswordInput.value;
     if (!email || !password) return showToast("Preencha email e senha", "error");
